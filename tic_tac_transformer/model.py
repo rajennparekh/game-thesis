@@ -17,11 +17,11 @@ class LayerNorm(nn.Module):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
 
-class CausalSelfAttention(nn.Module):
+class CausalSelfAttention(nn.Module): #updated to have the dimension be the attention layer multiplier
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
+        self.c_attn = nn.Linear(config.n_embd, config.attention_layer_mult * config.n_embd, bias=config.bias)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
@@ -48,12 +48,12 @@ class CausalSelfAttention(nn.Module):
         return self.resid_dropout(self.c_proj(y))
 
 
-class MLP(nn.Module):
+class MLP(nn.Module): # updated to use the mlp layer multiplier
     def __init__(self, config):
         super().__init__()
-        self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
+        self.c_fc = nn.Linear(config.n_embd, config.mlp_layer_mult * config.n_embd, bias=config.bias)
         self.gelu = nn.GELU()
-        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
+        self.c_proj = nn.Linear(config.mlp_layer_mult * config.n_embd, config.n_embd, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
@@ -80,6 +80,9 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
+    # this now includes attention_layer_mult, mlp_layer_mult, and model_version
+    # to adjust the model. Eventually, model_version will let us use different
+    # types of models
     block_size: int = 10
     vocab_size: int = 14
     n_layer: int = 1
@@ -87,6 +90,9 @@ class GPTConfig:
     n_embd: int = 12
     dropout: float = 0.0
     bias: bool = False
+    attention_layer_mult: int = 3
+    mlp_layer_mult: int = 4
+    model_version: str = 'gpt'
 
 
 class GPT(nn.Module):

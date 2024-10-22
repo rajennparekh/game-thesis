@@ -7,6 +7,32 @@ import torch
 from tokens import PAD
 from setup import init_model, save_checkpoint
 
+import argparse
+
+# Set up argument parser with the arguments we can pass
+parser = argparse.ArgumentParser(description='Training file')
+parser.add_argument('--n_layer', type=int, default=1)
+parser.add_argument('--n_head', type=int, default=1)
+parser.add_argument('--n_embed', type=int, default=12)
+parser.add_argument('--dropout', type=float, default=0.0)
+parser.add_argument('--bias', type=bool, default=False)
+parser.add_argument('--attention_layer_mult', type=int, default=3)
+parser.add_argument('--mlp_layer_mult', type=int, default=4)
+parser.add_argument('--model_version', type=str, default='gpt')
+
+# Parse the arguments
+args = parser.parse_args()
+
+# Access the arguments to pass into model setup
+n_layer = args.n_layer
+n_head = args.n_head
+n_embed = args.n_embed
+dropout = args.dropout
+bias = args.bias
+attention_layer_mult = args.attention_layer_mult
+mlp_layer_mult = args.mlp_layer_mult
+model_version = args.model_version
+
 save_interval = 1000
 
 wandb_log = True
@@ -39,7 +65,10 @@ def get_batch():
 
 iter_num = 0
 
-model = init_model()
+# initializes the model with our specified parameters/architecture
+model = init_model(n_layer, n_head, n_embed, dropout, bias, 
+                   attention_layer_mult, mlp_layer_mult, model_version=model_version)
+
 model.to(device)
 model.train()
 
