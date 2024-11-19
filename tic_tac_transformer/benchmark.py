@@ -7,12 +7,15 @@ import random
 
 
 model = load_from_checkpoint()
+# print(model.get_num_params())
 model.eval()
 model.to(device)
 
+silent = True
+
 with torch.no_grad():
     counts = {"player_2": 0, "player_1": 0, "draw": 0, "invalid": 0}
-    for _ in range(1000):
+    for _ in range(10000):
         board = np.zeros((3, 3), dtype=int)
         player = 1
         winner = None
@@ -24,7 +27,8 @@ with torch.no_grad():
                 y = y[0][-1].item()
 
                 if y not in set(range(9)) or y in moves:
-                    print(f"invalid move: {y} moves: {moves}")
+                    if not silent:
+                        print(f"invalid move: {y} moves: {moves}")
                     winner = None
                     break
 
@@ -46,5 +50,8 @@ with torch.no_grad():
         else:
             counts["invalid"] += 1
 
+    print(model.get_num_params())
     print(counts)
-    print(counts["player_1"] / sum(counts.values()))
+    print(counts["player_1"] / sum(counts.values())) # Win rate
+    print(counts["invalid"] / sum(counts.values())) # Invalid rate
+

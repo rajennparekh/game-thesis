@@ -17,11 +17,11 @@ class LayerNorm(nn.Module):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
 
-class CausalSelfAttention(nn.Module): #updated to have the dimension be the attention layer multiplier
+class CausalSelfAttention(nn.Module): 
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
-        self.c_attn = nn.Linear(config.n_embd, config.attention_layer_mult * config.n_embd, bias=config.bias)
+        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
@@ -44,7 +44,11 @@ class CausalSelfAttention(nn.Module): #updated to have the dimension be the atte
             dropout_p=self.dropout if self.training else 0,
             is_causal=True,
         )
+        # print('starting!')
+        # print(y.shape)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
+        # print(y.shape)
+        # print(self.c_proj(y).shape)
         return self.resid_dropout(self.c_proj(y))
 
 
@@ -80,7 +84,7 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    # this now includes attention_layer_mult, mlp_layer_mult, and model_version
+    # this now includes  mlp_layer_mult, and model_version
     # to adjust the model. Eventually, model_version will let us use different
     # types of models
     block_size: int = 10
@@ -90,7 +94,6 @@ class GPTConfig:
     n_embd: int = 12
     dropout: float = 0.0
     bias: bool = False
-    attention_layer_mult: int = 3
     mlp_layer_mult: int = 4
     model_version: str = 'gpt'
 
@@ -111,6 +114,7 @@ class GPT(nn.Module):
                 ln_f=LayerNorm(config.n_embd, bias=config.bias),
             )
         )
+
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         # with weight tying when using torch.compile() some warnings get generated:
         # "UserWarning: functional_call was passed multiple values for tied weights.
@@ -130,7 +134,7 @@ class GPT(nn.Module):
                 )
 
         # report number of parameters
-        print(f"number of parameters: {self.get_num_params()}")
+        # print(f"number of parameters: {self.get_num_params()}")
 
     def get_num_params(self, non_embedding=True):
         """
@@ -143,6 +147,26 @@ class GPT(nn.Module):
         if non_embedding:
             n_params -= self.transformer.wpe.weight.numel()
         return n_params
+
+        # n_params = 0
+        # print(f"{'Parameter Name':<40}{'Num Elements':<15}{'Shape':<20}")
+        # print("-" * 75)
+
+        # for name, param in self.named_parameters():
+        #     numel = param.numel()
+        #     shape = str(tuple(param.shape))  # Convert tuple to string
+        #     print(f"{name:<40}{numel:<15}{shape:<20}")
+        #     n_params += numel
+
+        # if non_embedding:
+        #     wpe_numel = self.transformer.wpe.weight.numel()
+        #     wpe_shape = str(self.transformer.wpe.weight.shape)  # Convert shape to string
+        #     n_params -= wpe_numel
+        #     print(f"{'wpe.weight (subtracted)':<40}{wpe_numel:<15}{wpe_shape:<20}")
+
+        # print("-" * 75)
+        # print(f"Total Parameters (non-embedding: {non_embedding}): {n_params}")
+        # return n_params
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -161,12 +185,19 @@ class GPT(nn.Module):
         pos = torch.arange(0, t, dtype=torch.long, device=device)  # shape (t)
 
         # forward the GPT model itself
+        # print(b)
+        # print(t)
+        # print(self.config.n_embd)
         tok_emb = self.transformer.wte(idx)  # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos)  # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
+        # print("starting prints")
+        # print(x.size())
         for block in self.transformer.h:
             x = block(x)
+        # print(x.size())
         x = self.transformer.ln_f(x)
+        # print(x.size())
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
@@ -180,7 +211,10 @@ class GPT(nn.Module):
                 x[:, [-1], :]
             )  # note: using list [-1] to preserve the time dim
             loss = None
-
+        # print("First input in batch:", idx[0])
+        # probabilities = F.softmax(logits[0], dim=-1)  # Apply softmax to the first set of logits
+        # rounded_probabilities = torch.round(probabilities * 100) / 100  # Round to nearest 1%
+        # print("Rounded probabilities for the first input:", rounded_probabilities)
         return logits, loss
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
@@ -222,6 +256,7 @@ class GPT(nn.Module):
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
         """
+     
         for _ in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = (
@@ -229,6 +264,7 @@ class GPT(nn.Module):
                 if idx.size(1) <= self.config.block_size
                 else idx[:, -self.config.block_size :]
             )
+    
             # forward the model to get the logits for the index in the sequence
             logits, _ = self(idx_cond)
             # pluck the logits at the final step and scale by desired temperature
