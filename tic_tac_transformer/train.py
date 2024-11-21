@@ -18,6 +18,8 @@ parser.add_argument('--dropout', type=float, default=0.0)
 parser.add_argument('--bias', type=bool, default=False)
 parser.add_argument('--mlp_layer_mult', type=int, default=4)
 parser.add_argument('--model_version', type=str, default='gpt')
+parser.add_argument('--train_time', type=int, default=None, 
+                    help="Training duration in seconds. Overrides max_iters if set.")
 
 # Parse the arguments
 args = parser.parse_args()
@@ -30,6 +32,11 @@ dropout = args.dropout
 bias = args.bias
 mlp_layer_mult = args.mlp_layer_mult
 model_version = args.model_version
+train_time = args.train_time
+
+end_time = None
+if train_time is not None:
+    end_time = time.time() + train_time
 
 save_interval = 1000
 
@@ -81,7 +88,7 @@ if wandb_log:
 # Get the first batch of data
 X, Y = get_batch()
 t0 = time.time()
-while iter_num < max_iters:
+while (iter_num < max_iters if train_time is None else time.time() < end_time):
     if iter_num > 0 and iter_num % save_interval == 0:
         save_checkpoint(model)
 
@@ -115,3 +122,5 @@ while iter_num < max_iters:
         )
 
     iter_num += 1
+print(f"Iters trained: {iter_num}")
+save_checkpoint(model)
