@@ -1,3 +1,5 @@
+# THIS IS NO LONGER USED. TOKENS ARE INSTEAD COMPUTED FROM M, N
+
 START = 9 # m*n
 PAD = 10 # m*n + 1
 VOCAB_SIZE = 11 # 2 + m*n (each move plus start and pad)

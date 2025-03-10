@@ -87,8 +87,11 @@ class GPTConfig:
     # this now includes  mlp_layer_mult, and model_version
     # to adjust the model. Eventually, model_version will let us use different
     # types of models
-    block_size: int = 10 # m * n + 1
-    vocab_size: int = 11 # m * n + 2
+    m: int = 3
+    n: int = 3
+    k: int = 3
+    # block_size: int = 10 # m * n + 1
+    # vocab_size: int = 11 # m * n + 2
     n_layer: int = 1
     n_head: int = 1
     n_embd: int = 12
@@ -101,21 +104,24 @@ class GPTConfig:
 class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
-        assert config.vocab_size is not None
-        assert config.block_size is not None
+        self.m = config.m
+        self.n = config.n
+        self.k = config.k
+        self.block_size = self.m * self.n + 1
+        self.vocab_size = self.m * self.n + 2
         self.config = config
 
         self.transformer = nn.ModuleDict(
             dict(
-                wte=nn.Embedding(config.vocab_size, config.n_embd),
-                wpe=nn.Embedding(config.block_size, config.n_embd),
+                wte=nn.Embedding(self.vocab_size, config.n_embd),
+                wpe=nn.Embedding(self.block_size, config.n_embd),
                 drop=nn.Dropout(config.dropout),
                 h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
                 ln_f=LayerNorm(config.n_embd, bias=config.bias),
             )
         )
 
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.n_embd, self.vocab_size, bias=False)
         # with weight tying when using torch.compile() some warnings get generated:
         # "UserWarning: functional_call was passed multiple values for tied weights.
         # This behavior is deprecated and will be an error in future versions"
@@ -180,8 +186,8 @@ class GPT(nn.Module):
         device = idx.device
         b, t = idx.size()
         assert (
-            t <= self.config.block_size
-        ), f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
+            t <= self.block_size
+        ), f"Cannot forward sequence of length {t}, block size is only {self.block_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device)  # shape (t)
 
         # forward the GPT model itself
@@ -261,8 +267,8 @@ class GPT(nn.Module):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = (
                 idx
-                if idx.size(1) <= self.config.block_size
-                else idx[:, -self.config.block_size :]
+                if idx.size(1) <= self.block_size
+                else idx[:, -self.block_size :]
             )
     
             # forward the model to get the logits for the index in the sequence

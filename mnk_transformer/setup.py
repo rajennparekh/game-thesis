@@ -1,6 +1,6 @@
 import torch
 import os
-from tokens import VOCAB_SIZE, SEQ_LENGTH
+# from tokens import VOCAB_SIZE, SEQ_LENGTH
 from model import GPTConfig, GPT
 
 
@@ -16,20 +16,22 @@ torch.backends.cudnn.allow_tf32 = True
 
 
 def init_model(m, n, k, n_layer=1, n_head=1, n_embed=12, dropout=0.0, bias=False, 
-               mlp_layer_mult=4, model_version='gpt'): 
+               mlp_layer_mult=4): 
     # these params will be passed in when function is called. Model version will let us choose which
     # type of model we want to use in the future
     print("Initializing a new model from scratch")
     config = GPTConfig(
-        block_size=m * n + 1, #SEQ_LENGTH,
-        vocab_size=m * n + 2, #VOCAB_SIZE,
+        m=m,
+        n=n,
+        k=k,
+        # block_size=m * n + 1, #SEQ_LENGTH,
+        # vocab_size=m * n + 2, #VOCAB_SIZE,
         n_layer=n_layer,
         n_head=n_head,
         n_embd=n_embed,
         dropout=dropout,
         bias=bias,
         mlp_layer_mult=mlp_layer_mult,
-        model_version=model_version,
     )
     return GPT(config)
 
@@ -43,7 +45,7 @@ def load_from_checkpoint():
     return model
 
 
-def save_checkpoint(model):
+def save_checkpoint(model, m=None, n=None, k=None):
     os.makedirs(out_dir, exist_ok=True)
     checkpoint = {
         "model": model.state_dict(),
@@ -51,4 +53,8 @@ def save_checkpoint(model):
         "config": model.config,
     }
     print(f"saving checkpoint to {out_dir}")
-    torch.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
+    if m is None or n is None or k is None: 
+        torch.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
+    else:
+        torch.save(checkpoint, os.path.join(out_dir, f"ckpt_m{m}_n{n}_k{k}.pt"))
+

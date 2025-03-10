@@ -4,7 +4,7 @@ import time
 import numpy as np
 import torch
 
-from tokens import PAD
+# from tokens import PAD
 from setup import init_model, save_checkpoint
 
 import argparse
@@ -14,7 +14,6 @@ parser = argparse.ArgumentParser(description='Training file')
 parser.add_argument('--m', type=int, default=3)
 parser.add_argument('--n', type=int, default=3)
 parser.add_argument('--k', type=int, default=3)
-parser.add_argument('--all_or_optimal', type=str, default='all')
 
 parser.add_argument('--n_layer', type=int, default=1)
 parser.add_argument('--n_head', type=int, default=1)
@@ -22,7 +21,6 @@ parser.add_argument('--n_embd', type=int, default=12)
 parser.add_argument('--dropout', type=float, default=0.0)
 parser.add_argument('--bias', type=bool, default=False)
 parser.add_argument('--mlp_layer_mult', type=int, default=4)
-parser.add_argument('--model_version', type=str, default='gpt')
 parser.add_argument('--train_time', type=int, default=None, 
                     help="Training duration in seconds. Overrides max_iters if set.")
 
@@ -33,7 +31,6 @@ args = parser.parse_args()
 m = args.m 
 n = args.n 
 k = args.k
-all_or_optimal = args.all_or_optimal 
 
 n_layer = args.n_layer
 n_head = args.n_head
@@ -41,7 +38,6 @@ n_embd = args.n_embd
 dropout = args.dropout
 bias = args.bias
 mlp_layer_mult = args.mlp_layer_mult
-model_version = args.model_version
 train_time = args.train_time
 
 end_time = None
@@ -56,7 +52,7 @@ wandb_project = "ttt"
 batch_size = 2048
 
 learning_rate = 6e-4
-max_iters = 100000 #100000
+max_iters = 100000
 weight_decay = 1e-1
 beta1 = 0.9
 beta2 = 0.95
@@ -67,7 +63,7 @@ device = "mps" if torch.backends.mps.is_available() else "cpu"
 print(device)
 
 data_dir = "data"
-train_data = np.load(os.path.join(data_dir,f"train_m{m}_n{n}_k{k}_{all_or_optimal}.npy")).astype(dtype=np.int64)
+train_data = np.load(os.path.join(data_dir,f"train_m{m}_n{n}_k{k}.npy")).astype(dtype=np.int64)
 
 def get_batch():
     data = train_data
@@ -81,8 +77,7 @@ def get_batch():
 iter_num = 0
 
 # initializes the model with our specified parameters/architecture
-model = init_model(m, n, k, n_layer, n_head, n_embd, dropout, bias, 
-                   mlp_layer_mult, model_version=model_version)
+model = init_model(m, n, k, n_layer, n_head, n_embd, dropout, bias, mlp_layer_mult)
 
 model.to(device)
 model.train()
