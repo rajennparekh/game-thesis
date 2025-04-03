@@ -14,14 +14,14 @@ model.to(device)
 silent = True
 
 with torch.no_grad():
-    counts = {"player_2": 0, "player_1": 0, "draw": 0, "invalid": 0}
-    for _ in range(10000):
+    counts = {"player_1": 0, "player_2": 0, "draw": 0, "invalid": 0}
+    for _ in range(1000):
         board = np.zeros((3, 3), dtype=int)
         player = 1
         winner = None
         moves = [START]
         while winner is None and not board_full(board):
-            if player == 1:
+            if player == 1 or player == -1:
                 x = torch.tensor(moves, dtype=torch.long, device=device)[None, ...]
                 y = model.generate(x, max_new_tokens=1, temperature=1.0, top_k=3)
                 y = y[0][-1].item()
@@ -54,4 +54,3 @@ with torch.no_grad():
     print(counts)
     print(counts["player_1"] / sum(counts.values())) # Win rate
     print(counts["invalid"] / sum(counts.values())) # Invalid rate
-

@@ -15,7 +15,7 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
 
-def init_model(n_layer=1, n_head=1, n_embed=14, dropout=0.0, bias=False, 
+def init_model(n_layer=1, n_head=1, n_embed=12, dropout=0.0, bias=False, 
                mlp_layer_mult=4, model_version='gpt'): 
     # these params will be passed in when function is called. Model version will let us choose which
     # type of model we want to use in the future

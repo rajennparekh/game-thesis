@@ -4,7 +4,6 @@ import os
 from model import GPTConfig, GPT
 
 
-out_dir = "out"
 seed = 1337
 device  = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 
@@ -36,8 +35,8 @@ def init_model(m, n, k, n_layer=1, n_head=1, n_embed=12, dropout=0.0, bias=False
     return GPT(config)
 
 
-def load_from_checkpoint():
-    ckpt_path = os.path.join(out_dir, "ckpt.pt")
+def load_from_checkpoint(out_dir='out', name='ckpt'):
+    ckpt_path = os.path.join(out_dir, f"{name}.pt")
     checkpoint = torch.load(ckpt_path, map_location=device)
     model = GPT(checkpoint["config"])
     state_dict = checkpoint["model"]
@@ -45,16 +44,16 @@ def load_from_checkpoint():
     return model
 
 
-def save_checkpoint(model, m=None, n=None, k=None):
+def save_checkpoint(model, out_dir='out', name='ckpt', m=None, n=None, k=None):
     os.makedirs(out_dir, exist_ok=True)
     checkpoint = {
         "model": model.state_dict(),
         "optimizer": model.state_dict(),
         "config": model.config,
     }
-    print(f"saving checkpoint to {out_dir}")
+    print(f"saving checkpoint {name} to {out_dir}")
     if m is None or n is None or k is None: 
-        torch.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
+        torch.save(checkpoint, os.path.join(out_dir, f"{name}.pt"))
     else:
         torch.save(checkpoint, os.path.join(out_dir, f"ckpt_m{m}_n{n}_k{k}.pt"))
 

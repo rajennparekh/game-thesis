@@ -2,6 +2,7 @@ import csv
 import subprocess
 import time
 from datetime import datetime
+import re
 
 # Hardcoded hyperparameter combinations
 combinations = [
@@ -21,8 +22,12 @@ combinations = [
 ]
 
 # CSV file to store results
-csv_file = 'nov_21_exp_results.csv'
-header = ['timestamp', 'n_layer', 'n_head', 'n_embd', 'num_params', 'win_rate', 'invalid_rate', 'train_time']
+csv_file = 'experiment_results/dec1_arch_exp.csv'
+header = ['timestamp', 'n_layer', 'n_head', 'n_embd', 'num_params', 'win_rate', 'invalid_rate', 'train_time', 'wandb_link']
+
+def remove_ansi_escape_sequences(text):
+    ansi_escape = re.compile(r'\x1b\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]')
+    return ansi_escape.sub('', text)
 
 def train_model(n_layer, n_head, n_embd):
     """Trains the model with the specified hyperparameters and returns training time."""
@@ -38,7 +43,13 @@ def train_model(n_layer, n_head, n_embd):
         raise RuntimeError(f"Training failed: {result.stderr}")
     
     train_time = time.time() - start_time
-    return train_time
+    
+    stdout_lines = result.stdout.splitlines()
+    wandb_line = next((line for line in stdout_lines if "at: " in line), None)
+    wandb_link = str(wandb_line.split(": ")[2]) if wandb_line else ""
+    wandb_link = remove_ansi_escape_sequences(wandb_link)
+
+    return train_time, wandb_link
 
 def evaluate_model():
     """Evaluates the model and returns `num_params`, `win_rate`, and `invalid_rate`."""
@@ -67,20 +78,20 @@ with open(csv_file, 'a', newline='') as f:  # 'a' mode to append instead of over
         writer.writerow(header)
 
     for n_layer, n_head, n_embd in combinations:
-        for run in range(5):
+        for run in range(1):
             print(f"Running with n_layer={n_layer}, n_head={n_head}, n_embd={n_embd}")
             
             # Record start timestamp
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             # Train and record the time taken
-            train_time = train_model(n_layer, n_head, n_embd)
+            train_time, wandb_link = train_model(n_layer, n_head, n_embd)
             
             # Evaluate and get metrics
             num_params, win_rate, invalid_rate = evaluate_model()
             
             # Append results to CSV
-            writer.writerow([timestamp, n_layer, n_head, n_embd, num_params, win_rate, invalid_rate, train_time])
+            writer.writerow([timestamp, n_layer, n_head, n_embd, num_params, win_rate, invalid_rate, train_time, wandb_link])
             print(f"Completed for n_layer={n_layer}, n_head={n_head}, n_embd={n_embd}: "
                 f"num_params={num_params}, win_rate={win_rate}, invalid_rate={invalid_rate}, "
                 f"train_time={train_time:.2f} seconds, timestamp={timestamp}")

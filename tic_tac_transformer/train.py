@@ -86,14 +86,21 @@ if wandb_log:
     wandb.init(project=wandb_project)
 
 # Get the first batch of data
+loss_by_iter = []
+
 X, Y = get_batch()
 t0 = time.time()
 while (iter_num < max_iters if train_time is None else time.time() < end_time):
     if iter_num > 0 and iter_num % save_interval == 0:
         save_checkpoint(model)
+        print(iter_num)
+
 
     logits, loss = model(X, Y)
 
+    if iter_num + 1 % 100 == 0:
+        loss_by_iter.append(loss)
+    
     loss.backward()
 
     # Get a new batch after calculating gradients
@@ -110,7 +117,7 @@ while (iter_num < max_iters if train_time is None else time.time() < end_time):
     dt = t1 - t0
     t0 = t1
     lossf = loss.item()
-    print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms")
+    # print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms")
 
     if wandb_log:
         wandb.log(
@@ -124,3 +131,4 @@ while (iter_num < max_iters if train_time is None else time.time() < end_time):
     iter_num += 1
 print(f"Iters trained: {iter_num}")
 save_checkpoint(model)
+loss_by_iter

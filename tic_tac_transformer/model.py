@@ -32,6 +32,7 @@ class CausalSelfAttention(nn.Module):
 
     def forward(self, x):
         B, T, C = x.size()
+        # print(x.size())
         q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
@@ -88,7 +89,7 @@ class GPTConfig:
     # to adjust the model. Eventually, model_version will let us use different
     # types of models
     block_size: int = 10
-    vocab_size: int = 14
+    vocab_size: int = 11
     n_layer: int = 1
     n_head: int = 1
     n_embd: int = 12

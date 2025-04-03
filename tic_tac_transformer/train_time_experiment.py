@@ -2,13 +2,17 @@ import csv
 import subprocess
 import time
 from datetime import datetime
-
+import re
 # Training durations to test (in seconds)
 train_times = [60, 300, 1200, 3600]  # Example: 1 min, 2 min, 5 min, 10 min, 20 min
 
 # CSV file to store results
-csv_file = 'nov_21_train_time_results.csv'
-header = ['timestamp', 'train_time', 'num_params', 'win_rate', 'invalid_rate', 'iters']
+csv_file = 'experiment_results/dec1_train_time_experiment.csv'
+header = ['timestamp', 'train_time', 'num_params', 'win_rate', 'invalid_rate', 'iters', 'train_link']
+
+def remove_ansi_escape_sequences(text):
+    ansi_escape = re.compile(r'\x1b\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]')
+    return ansi_escape.sub('', text)
 
 def train_model(train_time):
     """
@@ -35,7 +39,11 @@ def train_model(train_time):
     iter_line = next((line for line in stdout_lines if line.startswith("Iters trained:")), None)
     iters = int(iter_line.split(":")[1].strip()) if iter_line else -1  # Fallback to -1 if not found
     
-    return elapsed_time, iters
+    wandb_line = next((line for line in stdout_lines if "at: " in line), None)
+    wandb_link = str(wandb_line.split(": ")[2]) if wandb_line else ""
+    wandb_link = remove_ansi_escape_sequences(wandb_link)
+
+    return elapsed_time, iters, wandb_link
 
 def evaluate_model():
     """
@@ -73,13 +81,13 @@ with open(csv_file, 'a', newline='') as f:
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             # Train the model
-            elapsed_time, iters = train_model(train_time)
+            elapsed_time, iters, wandb_link = train_model(train_time)
             print("Training completed")
             # Evaluate and get metrics
             num_params, win_rate, invalid_rate = evaluate_model()
             
             # Append results to CSV
-            writer.writerow([timestamp, elapsed_time, num_params, win_rate, invalid_rate, iters])
+            writer.writerow([timestamp, elapsed_time, num_params, win_rate, invalid_rate, iters, wandb_link])
             print(f"Completed training for {train_time} seconds: "
                   f"num_params={num_params}, win_rate={win_rate}, invalid_rate={invalid_rate}, "
                   f"elapsed_time={elapsed_time:.2f} seconds, iters={iters}, timestamp={timestamp}")
