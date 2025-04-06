@@ -5,68 +5,59 @@ import torch.nn as nn
 import os
 from setup import load_from_checkpoint, device
 from embeddings import get_layerwise_embeddings
-
-#TODO: Can we do further analysis? Confusion matrix results?
+from board_ops import check_winner
 
 class BoardStateClassifier(nn.Module):
-    def __init__(self, n_embd, board_size):
+    def __init__(self, n_embd, board_size, task3):
+        output_dim = 2 if task3 else board_size * 3
         super(BoardStateClassifier, self).__init__()
-        self.fc1 = nn.Linear(n_embd, 12)  # First hidden layer
-        # self.fc2 = nn.Linear(12, 12)      # Second hidden layer
-        self.fc2 = nn.Linear(12, board_size * 3)  # Output layer: 3 classes per board space
-        self.softmax = nn.Softmax(dim=-1)
+        self.fc1 = nn.Linear(n_embd, 12)
+        self.fc2 = nn.Linear(12, output_dim)
 
     def forward(self, x):
-        x = torch.relu(self.fc1(x))  # Apply ReLU activation
-        # x = torch.relu(self.fc2(x))  # Apply ReLU activation
-        x = self.fc2(x)  # No activation here, we'll apply softmax later
-        return x  # logits
-    
+        x = torch.relu(self.fc1(x))
+        return self.fc2(x)
+
 class LargeBoardStateClassifier(nn.Module):
-    def __init__(self, n_embd, board_size):
+    def __init__(self, n_embd, board_size, task3):
+        output_dim = 2 if task3 else board_size * 3
         super(LargeBoardStateClassifier, self).__init__()
-        self.fc1 = nn.Linear(n_embd, 32)  # First hidden layer
-        self.fc2 = nn.Linear(32, 16)      # Second hidden layer
-        self.fc3 = nn.Linear(16, board_size * 3)  # Output layer: 3 classes per board space
-        self.softmax = nn.Softmax(dim=-1)
+        self.fc1 = nn.Linear(n_embd, 32)
+        self.fc2 = nn.Linear(32, 16)
+        self.fc3 = nn.Linear(16, output_dim)
 
     def forward(self, x):
-        x = torch.relu(self.fc1(x))  # Apply ReLU activation
-        x = torch.relu(self.fc2(x))  # Apply ReLU activation
-        x = self.fc3(x)  # No activation here, we'll apply softmax later
-        return x  # logits
-    
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        return self.fc3(x)
+
 class LinearBoardStateClassifier(nn.Module):
-    def __init__(self, n_embd, board_size):
+    def __init__(self, n_embd, board_size, task3):
+        output_dim = 2 if task3 else board_size * 3
         super(LinearBoardStateClassifier, self).__init__()
-        self.fc = nn.Linear(n_embd, board_size * 3)  # Direct mapping from input to output
+        self.fc = nn.Linear(n_embd, output_dim)
 
     def forward(self, x):
         return self.fc(x)
-    
+
 def board_from_game_seq(seq, m=3, n=3):
     no_pad_seq = seq[1:]
     board = np.zeros((m, n))
-    for i in range(len(no_pad_seq)):
-        s = no_pad_seq[i]
+    for i, s in enumerate(no_pad_seq):
         if s < m * n:
-            row, col = s // n, s % n
-            if i % 2 == 0:
-                board[row][col] = 1
-            else:
-                board[row][col] = -1
+            row, col = divmod(s, n)
+            board[row][col] = 1 if i % 2 == 0 else -1
     return board
 
 def player_based_board_from_seq(seq, m=3, n=3):
     no_pad_seq = seq[1:]
     board = np.zeros((m, n))
     current_player = 1 if len(no_pad_seq) % 2 == 0 else -1
-    
-    for i, s in enumerate(no_pad_seq):
+    for s in no_pad_seq:
         if s < m * n:
-            row, col = s // n, s % n
+            row, col = divmod(s, n)
             board[row][col] = current_player
-            current_player *= -1  # Switch perspective after each move
+            current_player *= -1
     return board
 
 def occupied_board_from_seq(seq, m=3, n=3):
@@ -74,171 +65,135 @@ def occupied_board_from_seq(seq, m=3, n=3):
     board = np.zeros((m, n))
     for s in no_pad_seq:
         if s < m * n:
-            row, col = s // n, s % n
+            row, col = divmod(s, n)
             board[row][col] = 1
     return board
 
+def is_winner_from_game_seq(seq, m=3, n=3):
+    board = player_based_board_from_seq(seq, m, n)
+    return [1] if check_winner(board, 3) is not None else [0]
+
 def generate_dataset(task, df, m=3, n=3):
     dataset = []
-    game_seqs = df.values.tolist()
-    for game_seq in game_seqs:
+    for game_seq in df.values.tolist():
         for i in range(1, len(game_seq) + 1):
-            current_board = []
             trimmed_seq = game_seq[:i]
             if task == 0:
-                current_board = player_based_board_from_seq(trimmed_seq, m, n)
+                board = player_based_board_from_seq(trimmed_seq, m, n)
             elif task == 1:
-                current_board = board_from_game_seq(trimmed_seq, m, n)
+                board = board_from_game_seq(trimmed_seq, m, n)
             elif task == 2:
-                current_board = occupied_board_from_seq(trimmed_seq, m, n)
-            dataset.append((trimmed_seq, current_board))
+                board = occupied_board_from_seq(trimmed_seq, m, n)
+            elif task == 3:
+                board = is_winner_from_game_seq(trimmed_seq, m, n)
+            dataset.append((trimmed_seq, board))
     return dataset
 
 def map_board_state(state):
-    return {0: 0, 1: 1, -1: 2}.get(state, state)  # default to state if not in dict
+    return {0: 0, 1: 1, -1: 2}.get(state, state)
 
-def train(model, embeddings_tensor_sq, board_states_tensor, epochs=20):
-    losses = []
-    model.to(device)  # Move the model to the appropriate device
-
+def train(model, embeddings, targets, task, epochs=20):
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    data_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(embeddings, targets), batch_size=256, shuffle=True)
 
-    batch_size = 256
-    dataset_tensor = torch.utils.data.TensorDataset(embeddings_tensor_sq, board_states_tensor)
-    data_loader = torch.utils.data.DataLoader(dataset_tensor, batch_size=batch_size, shuffle=True)
-
-    for epoch in range(epochs):
-        model.train()  # Ensure model is in training mode at start of each epoch
+    model.to(device)
+    losses = []
+    for _ in range(epochs):
+        model.train()
         total_loss = 0
-        for embeddings, targets in data_loader:
-            embeddings, targets = embeddings.to(device), targets.to(device)
-
-            logits = model(embeddings)
-            loss = criterion(logits.view(-1, 3), targets.view(-1))
-
+        for emb, tgt in data_loader:
+            emb, tgt = emb.to(device), tgt.to(device)
+            logits = model(emb)
+            loss = criterion(logits, tgt) if task == 3 else criterion(logits.view(-1, 3), tgt.view(-1))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             total_loss += loss.item()
-
         losses.append(total_loss / len(data_loader))
-
     return losses
 
-
-def evaluate_model_accuracy(model, final_embeddings_tensor_sq, board_states_tensor, device, m=3, n=3):
-    model.eval()  # Set the model to evaluation mode
-
-    correct_board_predictions = 0
-    total_board_predictions = 0
-    correct_space_predictions = 0
-    total_space_predictions = 0
-
-    with torch.no_grad():  # No need to track gradients during evaluation
-        for index in range(len(final_embeddings_tensor_sq)):
-            # Select one sample from final_embeddings_tensor_sq
-            sample_embedding = final_embeddings_tensor_sq[index].unsqueeze(0).to(device)  # Add batch dimension
-
-            # Pass the sample through the model
-            logits = model(sample_embedding)  # Shape: [1, m * n * 3]
-
-            # Reshape the logits to [1, m * n, 3]
-            logits = logits.view(1, m * n, 3)
-
-            # Get the predicted classes by applying argmax on the last dimension (dim=-1)
-            predicted_classes = torch.argmax(logits, dim=-1)  # Shape: [1, m * n]
-
-            # Get the ground truth board state for the current index and move it to the same device
-            true_board_state = board_states_tensor[index].to(device)
-
-            # Compare the predicted classes with the ground truth board state
-            if torch.equal(predicted_classes.squeeze(), true_board_state):
-                correct_board_predictions += 1
-
-            total_board_predictions += 1
-
-            correct_space_predictions += (predicted_classes.squeeze() == true_board_state).sum().item()
-            total_space_predictions += true_board_state.numel()
-
-    # Calculate accuracy: Number of correct predictions / Total predictions
-    board_accuracy = correct_board_predictions / total_board_predictions
-    space_accuracy = correct_space_predictions / total_space_predictions
-
-    return board_accuracy, space_accuracy
+def evaluate_model_accuracy(model, embeddings, targets, task, m=3, n=3):
+    model.eval()
+    correct_board, total_board = 0, 0
+    correct_space, total_space = 0, 0
+    with torch.no_grad():
+        for i in range(len(embeddings)):
+            x = embeddings[i].unsqueeze(0).to(device)
+            logits = model(x)
+            if task == 3:
+                pred = torch.argmax(logits, dim=-1).item()
+                true = targets[i].item()
+                correct_board += int(pred == true)
+                total_board += 1
+            else:
+                logits = logits.view(1, m * n, 3)
+                pred = torch.argmax(logits, dim=-1)
+                true = targets[i].to(device)
+                correct_board += int(torch.equal(pred.squeeze(), true))
+                correct_space += (pred.squeeze() == true).sum().item()
+                total_board += 1
+                total_space += true.numel()
+    return correct_board / total_board, (correct_space / total_space if total_space > 0 else 0)
 
 def run_probe_experiment(task, m, n, k, out_dir='out', name='ckpt.pt'):
-    data_dir = "data"
-    train_data = np.load(os.path.join(data_dir, f"train_m{m}_n{n}_k{k}.npy")).astype(dtype=np.int64)
-    df = pd.DataFrame(train_data)
-    
-    dataset = generate_dataset(task, df)
-    np.random.shuffle(dataset)  # Shuffle dataset before selecting samples
+    task3 = task == 3
+    data = np.load(os.path.join('data', f"train_m{m}_n{n}_k{k}.npy")).astype(np.int64)
+    df = pd.DataFrame(data)
+    dataset = generate_dataset(task, df, m, n)
+    np.random.shuffle(dataset)
 
-    # Select fixed-size train and test datasets
     train_dataset = dataset[:100000]
     test_dataset = dataset[100000:120000]
 
-    # Extract sequences and board states for train and test sets
-    train_sequences = [seq for seq, _ in train_dataset]
-    train_board_states = np.array([board.flatten() for _, board in train_dataset])
+    train_seqs = [seq for seq, _ in train_dataset]
+    test_seqs = [seq for seq, _ in test_dataset]
 
-    test_sequences = [seq for seq, _ in test_dataset]
-    test_board_states = np.array([board.flatten() for _, board in test_dataset])
+    if task3:
+        train_targets = torch.tensor([label for _, label in train_dataset], dtype=torch.long).squeeze(1).to(device)
+        test_targets = torch.tensor([label for _, label in test_dataset], dtype=torch.long).squeeze(1).to(device)
+    else:
+        train_states = [list(map(map_board_state, board.flatten())) for _, board in train_dataset]
+        test_states = [list(map(map_board_state, board.flatten())) for _, board in test_dataset]
+        train_targets = torch.tensor(train_states, dtype=torch.long).to(device)
+        test_targets = torch.tensor(test_states, dtype=torch.long).to(device)
 
-    # Convert board states to tensor format (train & test)
-    train_mapped_board_states = [list(map(map_board_state, board)) for board in train_board_states]
-    train_board_states_tensor = torch.tensor(train_mapped_board_states, dtype=torch.long).to(device)
-
-    test_mapped_board_states = [list(map(map_board_state, board)) for board in test_board_states]
-    test_board_states_tensor = torch.tensor(test_mapped_board_states, dtype=torch.long).to(device)
-
-    # Get activations from every layer of the model
-    model = load_from_checkpoint(out_dir, name)
+    model = load_from_checkpoint(out_dir, name).to(device)
     model.eval()
-    model.to(device)
 
-    train_activations_list = get_layerwise_embeddings(model, train_sequences, device)
-    test_activations_list = get_layerwise_embeddings(model, test_sequences, device)
+    train_embs = get_layerwise_embeddings(model, train_seqs, device)
+    test_embs = get_layerwise_embeddings(model, test_seqs, device)
 
     layer_num_to_results = {}
+    for i, (train_layer, test_layer) in enumerate(zip(train_embs, test_embs)):
+        print(f"On layer {i + 1}")
+        train_x = torch.stack([act[:, -1, :] for act in train_layer]).squeeze(1)
+        test_x = torch.stack([act[:, -1, :] for act in test_layer]).squeeze(1)
 
-    for i, (train_activations, test_activations) in enumerate(zip(train_activations_list, test_activations_list)):
-        print(f"On layer number {i + 1}")
-        # Extract last-token activations
-        train_activations_last_token = [activation[:, -1, :] for activation in train_activations]
-        train_activations_tensor = torch.stack(train_activations_last_token).squeeze(1)
-
-        test_activations_last_token = [activation[:, -1, :] for activation in test_activations]
-        test_activations_tensor = torch.stack(test_activations_last_token).squeeze(1)
-
-        # Initialize models
-        model_mlp = BoardStateClassifier(n_embd=train_activations_tensor.size(1), board_size=m * n)
-        model_linear = LinearBoardStateClassifier(n_embd=train_activations_tensor.size(1), board_size=m * n)
-        model_mlp_large = LargeBoardStateClassifier(n_embd=train_activations_tensor.size(1), board_size=m * n)
+        model_mlp = BoardStateClassifier(train_x.size(1), m * n, task3)
+        model_linear = LinearBoardStateClassifier(train_x.size(1), m * n, task3)
+        model_mlp_large = LargeBoardStateClassifier(train_x.size(1), m * n, task3)
         models = [(model_mlp, "small mlp"), (model_linear, "linear"), (model_mlp_large, "large mlp")]
 
-        loss_by_model, board_accuracy_by_model, space_accuracy_by_model = {}, {}, {}
+        loss_dict, board_acc_dict, space_acc_dict = {}, {}, {}
+        for model, name in models:
+            print(f"Training {name}")
+            losses = train(model, train_x, train_targets, task, epochs=40)
+            board_acc, space_acc = evaluate_model_accuracy(model, test_x, test_targets, task, m, n)
+            loss_dict[name] = losses
+            board_acc_dict[name] = board_acc
+            space_acc_dict[name] = space_acc
 
-        for model, model_name in models:
-            # Train on the training set
-            print(f"Training {model_name}")
-            losses = train(model, train_activations_tensor, train_board_states_tensor, epochs=40)
-            loss_by_model[model_name] = losses
+        layer_num_to_results[i] = (
+            loss_dict,
+            board_acc_dict,
+            space_acc_dict,
+            model_mlp,
+            model_mlp_large,
+            model_linear,
+            train_x,
+            test_x
+        )
 
-            # Evaluate on the test set
-            board_accuracy, space_accuracy = evaluate_model_accuracy(model, test_activations_tensor, test_board_states_tensor, device, m, n)
-            board_accuracy_by_model[model_name] = board_accuracy
-            space_accuracy_by_model[model_name] = space_accuracy
-        
-        layer_num_to_results[i] = (loss_by_model, 
-                                   board_accuracy_by_model, 
-                                   space_accuracy_by_model, 
-                                   model_mlp,
-                                   model_mlp_large, 
-                                   model_linear, 
-                                   train_activations_tensor,
-                                   test_activations_tensor)
-
-    return (layer_num_to_results, train_board_states_tensor, test_board_states_tensor)
+    return layer_num_to_results, train_targets, test_targets

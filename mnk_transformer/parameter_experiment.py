@@ -6,15 +6,15 @@ from pathlib import Path
 from train_function import train
 from generate_data import run_generation
 
-data_name = "333_vary_layer" #change this
+data_name = "333_two_head" #change this
 
 # pseudocode... for different mnk...
 # 1. Check if data is generated and if not, generate it
 # 2. For each combo of (n_layer, n_head, n_embd) we want to...
 # 2a) Train and record 
 mnk_options = [(3, 3, 3)]
-layer_head_embd_options = [(1, 1, 24), (2, 1, 17), (3, 1, 14), (4, 1, 12)]
-train_trials = 15
+layer_head_embd_options = [(1, 2, 12)]
+train_trials = 20
 
 results = []
 
