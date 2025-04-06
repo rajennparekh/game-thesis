@@ -1,0 +1,20 @@
+# macOS system files
+.DS_Store
+
+# Documents you don't want to track
+Understanding_Deep_Learning.pdf
+APMA-honors-declaration-form.pdf
+Applied Mathematics Honors Declaration Form.pdf
+
+# Folders to ignore
+othello_world/
+tic_tac_transformer/
+
+# Contents inside mnk_transformer to ignore
+mnk_transformer/data/
+mnk_transformer/data_parameter_experiment/
+mnk_transformer/ttt_model/
+mnk_transformer/wandb/
+
+# Python cache
+__pycache__/
