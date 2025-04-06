@@ -37,7 +37,7 @@ def init_model(m, n, k, n_layer=1, n_head=1, n_embed=12, dropout=0.0, bias=False
 
 def load_from_checkpoint(out_dir='out', name='ckpt'):
     ckpt_path = os.path.join(out_dir, f"{name}.pt")
-    checkpoint = torch.load(ckpt_path, map_location=device)
+    checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
     model = GPT(checkpoint["config"])
     state_dict = checkpoint["model"]
     model.load_state_dict(state_dict)
