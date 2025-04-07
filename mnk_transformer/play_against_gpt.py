@@ -19,7 +19,6 @@ def play_game(model, m=3, n=3, k=3):
         style={"description_width": "initial"},
     )
     start_button = widgets.Button(description="Start Game", button_style="success")
-    reset_button = widgets.Button(description="Reset Game", button_style="warning")
     output = widgets.Output()
 
     def render_board():
@@ -107,19 +106,6 @@ def play_game(model, m=3, n=3, k=3):
             render_board()
         display_board()
 
-    def reset_game(_):
-        nonlocal board, move_sequence
-        board = np.zeros((m, n), dtype=int)
-        move_sequence = [start_token]
-        output.clear_output()
-        render_board()
-        for b in board_buttons:
-            for btn in b:
-                btn.description = " "
-                btn.disabled = False
-                btn.style.button_color = None
-        display_board()
-
     def display_board():
         board_box = widgets.VBox()
         global board_buttons
@@ -133,19 +119,18 @@ def play_game(model, m=3, n=3, k=3):
                 row.append(btn)
             board_buttons.append(row)
 
-        for i in range(m):
-            for j in range(n):
-                val = board[i, j]
-                if val == 1:
-                    board_buttons[i][j].description = "X"
-                    board_buttons[i][j].disabled = True
-                elif val == -1:
-                    board_buttons[i][j].description = "O"
-                    board_buttons[i][j].disabled = True
+        # for i in range(m):
+        #     for j in range(n):
+        #         val = board[i, j]
+        #         if val == 1:
+        #             board_buttons[i][j].description = "X"
+        #             board_buttons[i][j].disabled = True
+        #         elif val == -1:
+        #             board_buttons[i][j].description = "O"
+        #             board_buttons[i][j].disabled = True
 
         board_box.children = [widgets.HBox(row) for row in board_buttons]
         display(board_box)
 
     start_button.on_click(start_game)
-    reset_button.on_click(reset_game)
-    display(widgets.VBox([current_player, widgets.HBox([start_button, reset_button]), output]))
+    display(widgets.VBox([current_player, widgets.HBox([start_button]), output]))
