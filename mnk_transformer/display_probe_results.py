@@ -1,4 +1,3 @@
-# Final version: add integer-only ticks on the x-axis
 def launch_probe_accuracy_viewer(csv_path='../one_head_probe.csv'):
     import pandas as pd
     import matplotlib.pyplot as plt

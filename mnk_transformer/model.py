@@ -30,26 +30,33 @@ class CausalSelfAttention(nn.Module):
         self.dropout = config.dropout
         assert hasattr(torch.nn.functional, "scaled_dot_product_attention")
 
-    def forward(self, x):
+    def forward(self, x, return_head_outputs=False):
         B, T, C = x.size()
+        head_dim = C // self.n_head
+
+        # Split into q, k, v
         q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
-        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        y = torch.nn.functional.scaled_dot_product_attention(
-            q,
-            k,
-            v,
+
+        # Reshape: (B, T, n_head, head_dim) -> (B, n_head, T, head_dim)
+        q = q.view(B, T, self.n_head, head_dim).transpose(1, 2)
+        k = k.view(B, T, self.n_head, head_dim).transpose(1, 2)
+        v = v.view(B, T, self.n_head, head_dim).transpose(1, 2)
+
+        # Scaled dot-product attention
+        y = F.scaled_dot_product_attention(
+            q, k, v,
             attn_mask=None,
-            dropout_p=self.dropout if self.training else 0,
-            is_causal=True,
-        )
-        # print('starting!')
-        # print(y.shape)
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=True
+        )  # (B, n_head, T, head_dim)
+
+        if return_head_outputs:
+            return y.transpose(1, 2)  # (B, T, n_head, head_dim)
+
+        # Combine heads and apply projection
         y = y.transpose(1, 2).contiguous().view(B, T, C)
-        # print(y.shape)
-        # print(self.c_proj(y).shape)
         return self.resid_dropout(self.c_proj(y))
+
 
 
 class MLP(nn.Module): # updated to use the mlp layer multiplier

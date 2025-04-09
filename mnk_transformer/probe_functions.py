@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import os
 from setup import load_from_checkpoint, device
-from embeddings import get_layerwise_embeddings
+from embeddings import get_layerwise_embeddings, get_headwise_activations
 from board_ops import check_winner
 
 class BoardStateClassifier(nn.Module):
@@ -197,3 +197,69 @@ def run_probe_experiment(task, m, n, k, out_dir='out', name='ckpt.pt'):
         )
 
     return layer_num_to_results, train_targets, test_targets
+
+
+def run_probe_experiment_2head(task, m, n, k, out_dir='out', name='ckpt.pt', layer=0):
+    task3 = task == 3
+    data = np.load(os.path.join('data', f"train_m{m}_n{n}_k{k}.npy")).astype(np.int64)
+    df = pd.DataFrame(data)
+    dataset = generate_dataset(task, df, m, n)
+    np.random.shuffle(dataset)
+
+    train_dataset = dataset[:100000]
+    test_dataset = dataset[100000:120000]
+
+    train_seqs = [seq for seq, _ in train_dataset]
+    test_seqs = [seq for seq, _ in test_dataset]
+
+    if task3:
+        train_targets = torch.tensor([label for _, label in train_dataset], dtype=torch.long).squeeze(1).to(device)
+        test_targets = torch.tensor([label for _, label in test_dataset], dtype=torch.long).squeeze(1).to(device)
+    else:
+        train_states = [list(map(map_board_state, board.flatten())) for _, board in train_dataset]
+        test_states = [list(map(map_board_state, board.flatten())) for _, board in test_dataset]
+        train_targets = torch.tensor(train_states, dtype=torch.long).to(device)
+        test_targets = torch.tensor(test_states, dtype=torch.long).to(device)
+
+    model = load_from_checkpoint(out_dir, name).to(device)
+    model.eval()
+
+    # Extract activations from one transformer layer only
+    print(f"Extracting head-wise activations from layer {layer}")
+    train_head0_embs, train_head1_embs = get_headwise_activations(model, train_seqs, device, layer=layer)
+    test_head0_embs, test_head1_embs = get_headwise_activations(model, test_seqs, device, layer=layer)
+
+    results_by_head = {}
+
+    for head_idx, (train_embs, test_embs) in enumerate([(train_head0_embs, test_head0_embs),
+                                                        (train_head1_embs, test_head1_embs)]):
+        print(f"\nProbing head {head_idx}")
+        train_x = torch.stack(train_embs)
+        test_x = torch.stack(test_embs)
+
+        model_mlp = BoardStateClassifier(train_x.size(1), m * n, task3)
+        model_linear = LinearBoardStateClassifier(train_x.size(1), m * n, task3)
+        model_mlp_large = LargeBoardStateClassifier(train_x.size(1), m * n, task3)
+        models = [(model_mlp, "small mlp"), (model_linear, "linear"), (model_mlp_large, "large mlp")]
+
+        loss_dict, board_acc_dict, space_acc_dict = {}, {}, {}
+        for model_, name_ in models:
+            print(f"Training {name_}")
+            losses = train(model_, train_x, train_targets, task, epochs=40)
+            board_acc, space_acc = evaluate_model_accuracy(model_, test_x, test_targets, task, m, n)
+            loss_dict[name_] = losses
+            board_acc_dict[name_] = board_acc
+            space_acc_dict[name_] = space_acc
+
+        results_by_head[head_idx] = (
+            loss_dict,
+            board_acc_dict,
+            space_acc_dict,
+            model_mlp,
+            model_mlp_large,
+            model_linear,
+            train_x,
+            test_x
+        )
+
+    return results_by_head, train_targets, test_targets
