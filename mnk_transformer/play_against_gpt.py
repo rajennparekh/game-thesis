@@ -21,53 +21,21 @@ def play_game(model, m=3, n=3, k=3):
     start_button = widgets.Button(description="Start Game", button_style="success")
     output = widgets.Output()
 
-    def render_board():
-        with output:
-            clear_output(wait=True)
-            print("🧠 vs 👤  |  Current Board\n")
-            for i in range(m):
-                row = []
-                for j in range(n):
-                    cell = board[i, j]
-                    if cell == 1:
-                        row.append("❌")
-                    elif cell == -1:
-                        row.append("⭕")
-                    else:
-                        row.append("⬜")
-                print("      ".join(row))
-            print()
+    board_buttons = [[None for _ in range(n)] for _ in range(m)]  # will get filled in
 
-    def button_click(i, j):
-        nonlocal move_sequence
-
-        if board[i, j] != 0:
-            return
-
-        board[i, j] = 1
-        move_sequence.append(i * n + j)
-        render_board()
-
-        if check_winner(board, k) or is_draw(board):
-            show_result()
-            return
-
-        import time
-        time.sleep(0.5)  # small pause for effect
-
-        # GPT's turn
-        model_input = torch.tensor(move_sequence, device=device).unsqueeze(0)
-        with torch.no_grad():
-            out = model.generate(model_input, max_new_tokens=1)
-        gpt_move = out[0, -1].item()
-        move_sequence.append(gpt_move)
-        gi, gj = divmod(gpt_move, n)
-        board[gi, gj] = -1
-
-        render_board()
-
-        if check_winner(board, k) or is_draw(board):
-            show_result()
+    def update_board_buttons():
+        for i in range(m):
+            for j in range(n):
+                val = board[i, j]
+                btn = board_buttons[i][j]
+                if val == 1:
+                    btn.description = "❌"
+                    btn.disabled = True
+                elif val == -1:
+                    btn.description = "⭕"
+                    btn.disabled = True
+                else:
+                    btn.description = "⬜"
 
     def is_draw(board):
         return np.all(board != 0)
@@ -79,23 +47,86 @@ def play_game(model, m=3, n=3, k=3):
     def show_result():
         winner = check_winner(board, k)
         if winner == 1:
-            print("🎉 You win!")
+            output.clear_output()
+            with output:
+                print("🎉 You win!")
         elif winner == -1:
-            print("🤖 GPT wins!")
+            output.clear_output()
+            with output:
+                print("🤖 GPT wins!")
         else:
-            print("🤝 It's a draw!")
-        for b in board_buttons:
-            for btn in b:
+            output.clear_output()
+            with output:
+                print("🤝 It's a draw!")
+
+        for row in board_buttons:
+            for btn in row:
                 btn.disabled = True
 
+    def button_click(i, j):
+        nonlocal move_sequence
+
+        if board[i, j] != 0:
+            return
+
+        # Human move
+        board[i, j] = 1
+        move_sequence.append(i * n + j)
+        update_board_buttons()
+
+        if check_winner(board, k) or is_draw(board):
+            show_result()
+            return
+
+        # GPT move
+        import time
+        time.sleep(0.5)
+
+        model_input = torch.tensor(move_sequence, device=device).unsqueeze(0)
+        with torch.no_grad():
+            out = model.generate(model_input, max_new_tokens=1)
+        gpt_move = out[0, -1].item()
+        move_sequence.append(gpt_move)
+        gi, gj = divmod(gpt_move, n)
+        board[gi, gj] = -1
+        update_board_buttons()
+
+        if check_winner(board, k) or is_draw(board):
+            show_result()
+
+    def display_board():
+        board_box = widgets.VBox()
+
+        for i in range(m):
+            row = []
+            for j in range(n):
+                btn = widgets.Button(
+                    description="⬜",
+                    layout=widgets.Layout(width="80px", height="80px"),
+                    style={'font_size': '24px'}
+                )
+                btn.on_click(lambda b, i=i, j=j: button_click(i, j))
+                board_buttons[i][j] = btn
+                row.append(btn)
+            board_box.children += (widgets.HBox(row),)
+
+        display(board_box)
+
     def start_game(_):
+        board[:, :] = 0
+        move_sequence.clear()
+        move_sequence.append(start_token)
         output.clear_output()
+
+        for row in board_buttons:
+            for btn in row:
+                btn.description = "⬜"
+                btn.disabled = False
+
         first = current_player.value == "GPT goes first"
-        render_board()
         if first:
             import time
-            time.sleep(0.5)  # small pause for effect
-            # GPT plays first move
+            time.sleep(0.5)
             model_input = torch.tensor([start_token], device=device).unsqueeze(0)
             with torch.no_grad():
                 out = model.generate(model_input, max_new_tokens=1)
@@ -103,34 +134,9 @@ def play_game(model, m=3, n=3, k=3):
             move_sequence.append(gpt_move)
             gi, gj = divmod(gpt_move, n)
             board[gi, gj] = -1
-            render_board()
-        display_board()
 
-    def display_board():
-        board_box = widgets.VBox()
-        global board_buttons
-        board_buttons = []
-
-        for i in range(m):
-            row = []
-            for j in range(n):
-                btn = widgets.Button(description=" ", layout=widgets.Layout(width="40px"))
-                btn.on_click(lambda b, i=i, j=j: button_click(i, j))
-                row.append(btn)
-            board_buttons.append(row)
-
-        # for i in range(m):
-        #     for j in range(n):
-        #         val = board[i, j]
-        #         if val == 1:
-        #             board_buttons[i][j].description = "X"
-        #             board_buttons[i][j].disabled = True
-        #         elif val == -1:
-        #             board_buttons[i][j].description = "O"
-        #             board_buttons[i][j].disabled = True
-
-        board_box.children = [widgets.HBox(row) for row in board_buttons]
-        display(board_box)
+        update_board_buttons()
 
     start_button.on_click(start_game)
     display(widgets.VBox([current_player, widgets.HBox([start_button]), output]))
+    display_board()
