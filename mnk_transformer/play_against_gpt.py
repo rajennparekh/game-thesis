@@ -102,8 +102,8 @@ def play_game(model, m=3, n=3, k=3):
             for j in range(n):
                 btn = widgets.Button(
                     description="⬜",
-                    layout=widgets.Layout(width="80px", height="80px"),
-                    style={'font_size': '24px'}
+                    layout=widgets.Layout(width="120px", height="120px"),
+                    style={'font_size': '36px'}
                 )
                 btn.on_click(lambda b, i=i, j=j: button_click(i, j))
                 board_buttons[i][j] = btn
